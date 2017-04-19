@@ -127,7 +127,7 @@ public class Purse extends Applet {
         if(papdu.lc != (byte)0x15)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);  
   
-        //文件空间已满  
+      //文件空间已满  
         if(keyfile.recNum >= 3)
             ISOException.throwIt(ISO7816.SW_FILE_FULL);  
   

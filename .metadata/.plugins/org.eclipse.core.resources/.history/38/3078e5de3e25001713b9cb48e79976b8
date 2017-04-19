@@ -51,7 +51,7 @@ public class Purse extends Applet {
 		papdu.cla = apdu_buffer[0];  
         papdu.ins = apdu_buffer[1];  
         papdu.p1 = apdu_buffer[2];  
-        papdu.p2 = apdu_buffer[3];
+        papdu.p2 = apdu_buffer[3];  
         Util.arrayCopyNonAtomic(apdu_buffer, (short)5, papdu.pdata, (short)0, lc); 
 		/*
 		 * 步骤3：判断命令APDU是否包含数据段，有数据则获取数据长度，并对le赋值
@@ -112,14 +112,10 @@ public class Purse extends Applet {
         if(keyfile == null)
             ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);  
         
-        if( papdu.cla != (byte)0x80)
-            ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED); 
-        
-        if(papdu.ins != condef.INS_WRITE_KEY)
-            ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);   
+        if( papdu.cla != (byte)0x80 || papdu.ins != (byte)0xD4)
+            ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);  
   
         //秘钥文件的p1为0x00， p2
-        //write_key中p1必须为0x00，p2必不在0x16到0x18，否则就是另外三种文件
         if(papdu.p1 != (byte)0x00 || (papdu.p2 >= (byte)0x16 && papdu.p2 <= (byte)0x18))  
             ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
         
@@ -127,7 +123,7 @@ public class Purse extends Applet {
         if(papdu.lc != (byte)0x15)
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);  
   
-        //文件空间已满  
+      //文件空间已满  
         if(keyfile.recNum >= 3)
             ISOException.throwIt(ISO7816.SW_FILE_FULL);  
   
@@ -232,9 +228,9 @@ public class Purse extends Applet {
 		switch(papdu.pdata[0]){
 		case condef.EP_FILE:        return EP_file();   	// 0x2F电子钱包文件
 		//todo:完成创建密钥文件，持卡人基本文件和应用基本文件
-        case condef.PERSON_FILE:	return Person_file(); 	// 0x39持卡人基本文件
-        case condef.CARD_FILE:	    return Card_file();  	// 0x38应用基本文件
-		case condef.KEY_FILE:      	return Key_file();  	// 0x3F密钥文件
+        case (short)0x39:    		return Person_file(); 	// 0x39持卡人基本文件
+        case (short)0x38:		    return APP_file();  	// 0x38应用基本文件
+		case (short)0x3F:       	return Key_file();  	// 0x3F密钥文件
 		default: 
 			ISOException.throwIt(ISO7816.SW_FUNC_NOT_SUPPORTED);
 		}
@@ -249,14 +245,6 @@ public class Purse extends Applet {
 		if(papdu.cla != (byte)0x80)
 			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
 		
-		//EP的ins必须为0xE0，校验以免误调用
-		if(papdu.ins != condef.INS_CREATE_FILE)
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-
-		//p1和p2应该为0x00
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
-			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
-		
 		// LC：Data Field之长度
 		// 文件创建时文件信息长度为0x07
 		if(papdu.lc != (byte)0x07)
@@ -265,8 +253,7 @@ public class Purse extends Applet {
 		// 如果已经被分配
 		if(EPfile != null)
 			ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
-        
-		//每个应用只能有一个KEY文件，且必须最先建立
+        //每个应用只能有一个KEY文件，且必须最先建立
         //《02 电子钱包的文件系统》P19
         if(keyfile == null)
             ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);  
@@ -281,18 +268,9 @@ public class Purse extends Applet {
 	 * 持卡人信息文件  
 	 */
     private boolean Person_file() {  
-    	
         if(papdu.cla != (byte)0x80)  
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);  
-
-		//EP的ins必须为0xE0，校验以免误调用
-		if(papdu.ins != condef.INS_CREATE_FILE)
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-		
-		//p1和p2应该为0x00
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
-			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
-		
+  
         if(papdu.lc != (byte)0x07)  
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);  
   
@@ -319,15 +297,7 @@ public class Purse extends Applet {
 
         if(papdu.cla != (byte)0x80)  
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);  
-
-		//EP的ins必须为0xE0，校验以免误调用
-		if(papdu.ins != condef.INS_CREATE_FILE)
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-
-		//p1和p2应该为0x00
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
-			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
-		
+  
         // LC 应该为0x07, word中说的15有错
         if(papdu.lc != (byte)0x07)  
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);  
@@ -345,19 +315,11 @@ public class Purse extends Applet {
      * 应用 
      * 创建应用基本文件  
      */
-    private boolean Card_file() {  
+    private boolean APP_file() {  
     	
         if(papdu.cla != (byte)0x80)  
             ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);  
-
-		//EP的ins必须为0xE0，校验以免误调用
-		if(papdu.ins != condef.INS_CREATE_FILE)
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-
-		//p1和p2应该为0x00
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
-			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
-		
+  
         if(papdu.lc != (byte)0x07)  
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);  
   
