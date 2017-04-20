@@ -1,0 +1,156 @@
+package purse;
+
+import javacard.framework.JCSystem;
+import javacard.framework.Util;
+import javacard.security.DESKey;
+import javacard.security.Key;
+import javacard.security.KeyBuilder;
+import javacardx.crypto.Cipher;
+
+public class PenCipher {
+	private Cipher desEngine;
+	private Key deskey;
+	
+	public PenCipher(){
+		/*
+		 *  获得加密实例
+		 *  使用Cipher类中的getInstance()函数来获得加密实例
+		 */
+		desEngine = Cipher.getInstance(Cipher.ALG_DES_CBC_NOPAD, false);
+		/*
+		 * 生成DES密钥实例
+		 * 使用KeyBuilder中的buildKey()方法生成DES密钥实例
+
+		 */
+		deskey = KeyBuilder.buildKey(KeyBuilder.TYPE_DES, KeyBuilder.LENGTH_DES, false);
+	}
+	
+	/*
+	 * 功能：DES运算
+	 * 参数：key 密钥; kOff 密钥的偏移量; data 所要进行加解密的数据; dOff 数据偏移量； dLen 数据的长度; r 加解密后的数据缓冲区； rOff 结果数据偏移量； mode 加密或解密运算模式
+	 * 返回：无
+	 */
+	public final void cdes(byte[] akey, short kOff, byte[] data, short dOff, short dLen, byte[] r, short rOff, byte mode){
+		/*
+		 * 设置DES密钥
+		 * 使用DESKey接口中的setKey()函数设置密钥值，其中akey是密钥，kOff是密钥的偏移量。
+		 */
+		((DESKey)deskey).setKey(akey, kOff);
+		/*
+		 * 初始化密钥及加密模式
+		 * 使用Cipher类中的init()函数来设置加密对象实例
+		 * 其中mode是加解密模式（Cipher.MODE_ENCRYPT或Cipher.MODE_DECRYPT）
+		 */
+		desEngine.init(deskey, mode);
+		/*
+		 * 加密
+		 * 使用Cipher类中的doFinal()函数来完成运算
+		 * 其中data和dOff分别是加密数据和偏移量，dLen是数据长度，r和rOff分别是加密后的数据和偏移量。
+		 */
+
+		desEngine.doFinal(data, dOff, dLen, r, rOff);
+	}
+	
+	/*
+	 * 功能：生成过程密钥
+	 * 参数：key 密钥； data 所要加密的数据； dOff 所加密的数据偏移量； dLen 所加密的数据长度； r 加密后的数据； rOff 加密后的数据存储偏移量
+	 * 返回：无
+	 */
+	public final void gen_SESPK(byte[] key, byte[]data, short dOff, short dLen, byte[] r, short rOff){
+		//todo
+		//3DES
+        byte[] data_des_1st = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);//临时数组  
+        cdes(key,(short)0,data,(short)0,dLen,data_des_1st,(short)0,Cipher.MODE_ENCRYPT);  
+        
+        byte[] data_des_2ed = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);  
+        cdes(key,(short)8,data_des_1st,(short)0,dLen,data_des_2ed,(short)0,Cipher.MODE_DECRYPT);  
+        
+        cdes(key,(short)0,data_des_2ed,(short)0,dLen,r,rOff,Cipher.MODE_ENCRYPT);  
+	}
+	
+	/*
+	 * 功能：8个字节的异或操作
+	 * 参数：d1 进行异或操作的数据1 d2:进行异或操作的数据2 d2_off:数据2的偏移量
+	 * 返回：无
+	 */
+	public final void xorblock8(byte[] d1, byte[] d2, short d2_off){
+		//todo: 两个数据块进行异或，异或结果存入数据块d1中
+		short i = 0; 
+        while(i < 8) 
+                //d1.length) 这样造成数组越界，因为data32位但这只需异或8位 
+        { 
+            d1[i] ^= d2[d2_off];//= (byte)(d1[i] ^ d2[d2_off]); 
+            d2_off++; 
+            i++; 
+        }
+	}
+	
+	/*
+	 * 功能：字节填充
+	 * 参数：data 所要填充的数据； len 数据的长度
+	 * 返回：填充后的字节长度
+	 */
+	public final short pbocpadding(byte[] data, short len){
+		//todo: 填充字符串至8的倍数
+		data[len] = (byte)0x80;//先补充0x80  
+        len++;  
+        /*弱智了，怎么用成if害我浪费好几天的时间debug 
+         * if(len % 8 != 0)//不是8的倍数 
+        { 
+            data[len] = (byte)0x00; 
+            len++; 
+        }*/  
+        while(len % 8 != 0)//不是8的倍数  
+        {  
+            data[len] = (byte)0x00;  
+            len++;  
+        }  
+        //测试大招--直接抛出len值看是不是这里有bug  
+        //ISOException.throwIt(len);  
+		return len;
+	}
+	
+	/*
+	 * 功能：MAC和TAC的生成
+	 * 参数：key 密钥; data 所要加密的数据; dl 所要加密的数据长度； mac 所计算得到的MAC和TAC码
+	 * 返回：无
+	 */
+	public final void gmac4(byte[] key, byte[] data, short dl, byte[] mac){
+		//todo
+		//先填充，再
+		short new_dl = pbocpadding(data,dl);  
+        byte[] ini_num = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};  
+        short num = (short)(new_dl / 8); //切分成多少块  
+  
+        /*修改异或前版本为:xorblock8(data, ini_num, (short)0);*/  
+        xorblock8(ini_num, data, (short)0);  
+  
+        byte[] cipher = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);//密文暂存  
+        for(short i = 1; i <= num;i++)  
+        {  
+            /* 
+             * 功能：DES加密运算 
+             * 参数：key 密钥; kOff 密钥的偏移量; data 所要进行加解密的数据;  
+             * dOff 数据偏移量； dLen 数据的长度; r 加解密后的数据缓冲区； 
+             *  rOff 结果数据偏移量； mode 加密或解密运算模式:Cipher.MODE_DECRYPT/Cipher.MODE_ENCRYPT 
+             * 返回：无 
+             */  
+            /*错误版本,显然下一轮传进des的数据并非异或之后的,而是原本的data，异或的影响并没传进des 
+             * cdes(key,(short)0,data,(short)(8*(i-1)),(short)8,cipher,(short)0,Cipher.MODE_ENCRYPT); 
+            if(i < num)//异或需要比加密提前一轮结束 ,否则造成数组越界运行出错No precise... 
+            { 
+                xorblock8(cipher, data, (short)(8*i));               
+            }*/  
+            cdes(key,(short)0,data,(short)(8*(i-1)),(short)8,cipher,(short)0,Cipher.MODE_ENCRYPT);  
+            if(i < num)//异或需要比加密提前一轮结束 ,否则造成数组越界运行出错No precise...  
+            {  
+                xorblock8(cipher, data, (short)(8*i));  //这里的异或是修改之后的版本           
+            }  
+        }  
+        //最后一个密文就是mac/tac  
+        for(short i = 0;i < 4;i++)//mac是四字节的,计算结果是8位，所以取前四位就好,否则也会越界  
+        {  
+            mac[i] = cipher[i];  
+        }  
+	}
+}

@@ -42,7 +42,8 @@ public class Purse extends Applet {
 		// 如果Applet为空，退出
 		if (selectingApplet()) {
 			return;
-		}		
+		}
+		
 		//步骤1:取APDU缓冲区数组引用并将之赋给新建数组
 		byte apdu_buffer[] = apdu.getBuffer();
 		//步骤2：取APDU缓冲区中数据放到变量papdu
@@ -52,34 +53,54 @@ public class Purse extends Applet {
         papdu.ins = apdu_buffer[1];  
         papdu.p1 = apdu_buffer[2];  
         papdu.p2 = apdu_buffer[3];
-        Util.arrayCopyNonAtomic(apdu_buffer, (short)5, papdu.pdata, (short)0, lc); 
-		/*
-		 * 步骤3：判断命令APDU是否包含数据段，有数据则获取数据长度，并对le赋值
-		 * 否则，即不需要lc和data，则获取缓冲区原本lc实际上是le
-		 * 获取le的方法，因为不确定papdu有le部分，所以IOS7816下标可选项并没有le而是放在数据块中的. 
-		 * 如果有数据块，那le就是buffer[ISO7816.OFFSET_CDATA+lc]  
-		 * 调用papdu函数判断,不能直接通过lc判断,因为没lc只有le也会把le赋给lc  
-		 * 
-		 * 若papdu命令包含数据块  ，则需要更新le
-		 * 否则，将data的长度直接赋值给le
-		 * 注：LE字节表示的是期望卡片发回来的字节长度
-		 */
-		if(papdu.APDUContainData()) {
-		    papdu.le = apdu_buffer[ISO7816.OFFSET_CDATA+lc];  
-		    papdu.lc = apdu_buffer[ISO7816.OFFSET_LC];
-		}  else {  
-		    papdu.le = apdu_buffer[ISO7816.OFFSET_LC];
-		    papdu.lc = 0;  
-		}  
-		// rc获取返回数据，判断操作是否成功
-        boolean rc = handleEvent();
-		//步骤4:判断是否需要返回数据，并设置apdu缓冲区	
-        //if(papdu.le != 0)
-        // 如果成功，则返回数据，并且设置apdu缓冲区
-        if( rc ) {
-            Util.arrayCopyNonAtomic(papdu.pdata, (short)0, apdu_buffer, (short)5, (short)papdu.pdata.length);  
-            apdu.setOutgoingAndSend((short)5, papdu.le);//把缓冲区的数据返回给终端  
-        }  
+        Util.arrayCopyNonAtomic(apdu_buffer, (short)5, papdu.pdata, (short)0, lc);
+        
+        if(papdu.ins == (byte)0x62){
+
+    		PenCipher penci = new PenCipher();
+    		byte[] key = new byte[]{0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12};
+    		byte[] data = new byte[]{0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22};
+    		byte[] mac = new byte[4];
+    		
+    		penci.gmac4(key, data, (short)8, mac);
+    		
+    		//ISOException.throwIt((short) mac.length);
+    		
+    		Util.arrayCopyNonAtomic(mac, (short)0, apdu_buffer, (short)0, (short) 4);
+
+            apdu.setOutgoingAndSend((short)0, (short)4);//把缓冲区的数据返回给终端  
+        }else{
+	        
+			/*
+			 * 步骤3：判断命令APDU是否包含数据段，有数据则获取数据长度，并对le赋值
+			 * 否则，即不需要lc和data，则获取缓冲区原本lc实际上是le
+			 * 获取le的方法，因为不确定papdu有le部分，所以IOS7816下标可选项并没有le而是放在数据块中的. 
+			 * 如果有数据块，那le就是buffer[ISO7816.OFFSET_CDATA+lc]  
+			 * 调用papdu函数判断,不能直接通过lc判断,因为没lc只有le也会把le赋给lc  
+			 * 
+			 * 若papdu命令包含数据块  ，则需要更新le
+			 * 否则，将data的长度直接赋值给le
+			 * 注：LE字节表示的是期望卡片发回来的字节长度
+			 */
+			
+			if(papdu.APDUContainData()) {
+			    papdu.le = apdu_buffer[ISO7816.OFFSET_CDATA+lc];  
+			    papdu.lc = apdu_buffer[ISO7816.OFFSET_LC];
+			}  else {  
+			    papdu.le = apdu_buffer[ISO7816.OFFSET_LC];
+			    papdu.lc = 0;  
+			}  
+			// rc获取返回数据，判断操作是否成功
+	        boolean rc = handleEvent();
+			//步骤4:判断是否需要返回数据，并设置apdu缓冲区	
+	        //if(papdu.le != 0)
+	        // 如果成功，则返回数据，并且设置apdu缓冲区
+	        if( rc ) {
+	            Util.arrayCopyNonAtomic(papdu.pdata, (short)0, apdu_buffer, (short)5, (short)papdu.pdata.length);  
+	            apdu.setOutgoingAndSend((short)5, papdu.le);//把缓冲区的数据返回给终端  
+	        }  
+        }
+        
 	}
 
 	/*
@@ -438,7 +459,25 @@ public class Purse extends Applet {
 		
 		return true;
 	}
-		/*
+	
+	private void test_out(APDU apdu){
+		byte[] buf = apdu.getBuffer();
+		byte ins = buf[ISO7816.OFFSET_INS];
+
+		//short lc = apdu.setIncomingAndReceive();
+		switch (ins) {
+		case (byte) 0x00:
+			byte [] srcdata = {'h','e','l','l','o',',','w','o','r','l','d','!'}; 
+			Util.arrayCopyNonAtomic(srcdata, (short)0, buf, (short)0, (short) srcdata.length);
+			apdu.setOutgoingAndSend((short) 0, (short) srcdata.length);
+			break;
+		default:
+			// good practice: If you don't know the INStruction, say so:
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+		}
+	}
+	
+	/*
 	 * 功能：消费命令的实现
 	 */
 	private boolean purchase(){
