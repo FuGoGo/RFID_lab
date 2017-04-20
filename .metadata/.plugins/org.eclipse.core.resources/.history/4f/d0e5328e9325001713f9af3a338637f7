@@ -253,8 +253,8 @@ public class Purse extends Applet {
 		if(papdu.ins != condef.INS_CREATE_FILE)
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 
-		//p1应该为0x00，p2应该为0x18
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x18)
+		//p1和p2应该为0x00
+		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		
 		// LC：Data Field之长度
@@ -289,8 +289,8 @@ public class Purse extends Applet {
 		if(papdu.ins != condef.INS_CREATE_FILE)
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		
-		//p1应该为0x00, p2应该为0x17
-		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x17)
+		//p1和p2应该为0x00
+		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		
         if(papdu.lc != (byte)0x07)  
@@ -324,7 +324,7 @@ public class Purse extends Applet {
 		if(papdu.ins != condef.INS_CREATE_FILE)
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 
-		//p1应该为0x00， p2应该为0x00
+		//p1和p2应该为0x00
 		if(papdu.p1 != (byte)0x00 || papdu.p2 != (byte)0x00)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		
@@ -354,7 +354,7 @@ public class Purse extends Applet {
 		if(papdu.ins != condef.INS_CREATE_FILE)
 			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 
-		//p1应该为0x00, p2应该为0x16
+		//p1应该为0x00, p2应该为0x00或者0x16或者0x17或者0x18
 		if(papdu.p1 != (byte)0x00 || papdu.p2 != 0x16)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
 		
