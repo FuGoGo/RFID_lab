@@ -17,3 +17,13 @@ Command-line arguments:  -os win32 -ws win32 -arch x86 -product org.eclipse.epp.
 
 !ENTRY org.eclipse.equinox.p2.touchpoint.natives 4 0 2017-04-16 23:41:56.497
 !MESSAGE org.eclipse.equinox.internal.p2.touchpoint.natives.actions.UnzipAction error unzipping zipfile: D:\eclipse-cpp-juno-win32\eclipse\p2\org.eclipse.equinox.p2.core\cache\binary\org.eclipse.rcp.configuration_root.win32.win32.x86_1.0.0.M20130204-1200destination: D:\eclipse-cpp-juno-win32\eclipse
+!SESSION 2017-04-21 11:56:07.002 -----------------------------------------------
+eclipse.buildId=M20130204-1200
+java.version=1.6.0_35
+java.vendor=Sun Microsystems Inc.
+BootLoader constants: OS=win32, ARCH=x86, WS=win32, NL=zh_CN
+Framework arguments:  -product org.eclipse.epp.package.cpp.product
+Command-line arguments:  -os win32 -ws win32 -arch x86 -product org.eclipse.epp.package.cpp.product
+
+!ENTRY org.eclipse.core.resources 2 10035 2017-04-21 11:56:12.124
+!MESSAGE The workspace exited with unsaved changes in the previous session; refreshing workspace to recover changes.

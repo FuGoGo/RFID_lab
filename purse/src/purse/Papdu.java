@@ -24,6 +24,7 @@ public class Papdu {
 		case condef.INS_NIIT_TRANS:
 		case condef.INS_WRITE_KEY:
 		case condef.INS_WRITE_BIN:
+		case condef.INS_PURCHASE: // 真·日了狗了
 		
 			return true;
 		}

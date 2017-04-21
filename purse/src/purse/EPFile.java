@@ -1,5 +1,7 @@
 package purse;
 
+import javacard.framework.ISO7816;
+import javacard.framework.ISOException;
 import javacard.framework.JCSystem;
 import javacard.framework.Util;
 
@@ -69,15 +71,36 @@ public class EPFile {
 		
 		ads = (short)0;
 		for(i = 3; i >= 0; i --){
-			t1 = (short)(EP_balance[(short)i] & 0xFF);
-			t2 = (short)(data[i] & 0xFF);
+			t1 = (short)(EP_balance[(short)i] & 0xFF); 	//取出一个字节
+			t2 = (short)(data[i] & 0xFF);				//取出一个字节
 			
-			t1 = (short)(t1 + t2 + ads);
-			if(flag)
-				EP_balance[(short)i] = (byte)(t1 % 256);
-			ads = (short)(t1 / 256);
+			t1 = (short)(t1 + t2 + ads);				//对一个字节进行加法运算
+			if(flag)									//如果不更新，则abs单纯用来分辨数的大小
+				EP_balance[(short)i] = (byte)(t1 % 256);//更新
+			ads = (short)(t1 / 256);					//提取进位
 		}
 		return ads;
+	}
+	
+	/*
+	 * 功能：电子钱包金额减少
+	 * 参数：data 消费的金额； flag 是否真正扣减电子钱包余额
+	 * 返回： 消费是否超额
+	 */
+	public final short decrease(byte[] data, boolean flag){
+		short i, t1, t2, dec;
+		
+		dec = (short)0;
+		for(i = 3; i >= 0; i --){
+			t1 = (short)(EP_balance[(short)i] & 0xFF); 	//取出一个字节
+			t2 = (short)(data[i] & 0xFF);				//取出一个字节
+			
+			t1 = (short)(t1 - t2 - dec);				//对一个字节进行加法运算
+			if(flag)
+				EP_balance[(short)i] = (byte)((t1+256) % 256);//更新
+			dec = (short) (t1<0?1:0);					//借位标记，此处网上流传代码有误
+		}
+		return dec;
 	}
 	
 	/*
@@ -138,7 +161,7 @@ public class EPFile {
 		 * 加密后的结果是过程秘钥 8bytes，存在pTemp82中
 		 */
 		EnCipher.gen_SESPK(pTemp16, pTemp32, (short)0, (short)8, pTemp82, (short)0); 
-		
+		//ISOException.throwIt(pTemp82[0]);
 		/*
 		 * IC卡利用所生成的过程密钥产生MAC1。
 		 * 其MAC1的生成方式，我也将在之后的密钥管理中进行说明。
@@ -162,6 +185,7 @@ public class EPFile {
 		 * 有点担心gmac4的时候，爆数组= =
 		 * 加密后的mac值4bytes，存进pTemp41
 		 */
+		//下面这一行多余了，但是源代码就是写在这里。。。
 		Util.arrayCopyNonAtomic(pTemp32, (short)0, data, (short)0x00, (short)0x0F);
 		//gmac4参数：key 密钥; data 所要加密的数据; dl 所要加密的数据长度； mac 所计算得到的MAC和TAC码
 		EnCipher.gmac4(pTemp82, pTemp32, (short)0x0F, pTemp41);
@@ -188,6 +212,7 @@ public class EPFile {
 	 */
 	public final short load(byte[] data){
 		short rc;
+		//ISOException.throwIt((short) 0x1234);
 		/*
 		 * IC卡收到圈存命令后，利用过程密钥生成MAC2。
 		 * 其输入数据为交易金额||交易类型标识||终端机编号||交易日期（主机）||交易时间（主机）
@@ -262,14 +287,6 @@ public class EPFile {
 		
 		return (short)0;
 	}
-	/*
-	 * 功能：电子钱包金额减少
-	 * 参数：data 消费的金额； flag 是否真正扣减电子钱包余额
-	 * 返回： 消费是否超额
-	 */
-	public final short decrease(byte[] data, boolean flag){
-		return 0;
-	}
 		
 	/*
 	 * 功能：消费初始化命令的完成
@@ -277,6 +294,58 @@ public class EPFile {
 	 * 返回：0 命令执行成功；2 消费超额
 	 */
 	public final short init4purchase(short num, byte[] data){
+		short length,rc;
+		
+		//pTemp42用来存放交易金额
+		//pTemp81用来存放终端机编号
+		Util.arrayCopyNonAtomic(data, (short)1, pTemp42, (short)0, (short)4);  //交易金额
+		Util.arrayCopyNonAtomic(data, (short)5, pTemp81, (short)0, (short)6);  //终端机编号
+		
+		/*
+		 * 判断是否超额圈存
+		 * IC卡检查电子钱包余额是否大于或等于交易金额
+		 * 如果小于交易金额，则回送状态字9401，表示资金不足。
+		 */
+		rc = increase(pTemp42, false);
+		if(rc != (short)0)
+			return (short)2;
+		
+		/*
+		 * 密钥获取
+		 * 
+		 * keyfile中显示，取到的秘钥存在pTemp32中，返回伪所查找到的圈存密钥的长度
+		 * pTemp32结构：5个字节的密钥头+16个字节的密钥值
+		 * 具体结构为前3个byte未知，密钥版本号 1byte，算法标识  1byte，所查找到的圈存密钥16bytes
+		 * keyID密钥版本号
+		 * algID算法标识符
+		 * pTemp16所查找到的圈存密钥
+		 */
+		length = keyfile.readkey(num, pTemp32);
+		keyID = pTemp32[3];
+		algID = pTemp32[4];
+		Util.arrayCopyNonAtomic(pTemp32, (short)5, pTemp16, (short)0, length);
+		
+		/*
+		 * 产生随机数
+		 * RandData.GenerateSecureRnd()函数功能，产生一个4bytes的随机数
+		 * RandData.getRndValue(pTemp32, (short)0)功能，将随机数写进pTemp32[0:3]
+		 */
+		RandData.GenerateSecureRnd();
+		RandData.getRndValue(pTemp32, (short)0);
+		
+		/*
+		 * IC卡生成随机数后，进行以下处理
+		 * 在进行这些操作后，IC卡将返回相应的数据
+		 * 余额4bytes | 脱机交易序号2bytes | 透支限额3bytes | 密钥版本 1byte | 算法标识1byte | 伪随机数4bytes
+		 */
+		byte[] overdraft = {0x00, 0x00, 0x00};
+		Util.arrayCopyNonAtomic(EP_balance, (short)0, data, (short)0, (short)4);
+		Util.arrayCopyNonAtomic(EP_offline, (short)0, data, (short)4, (short)2);
+		Util.arrayCopyNonAtomic(overdraft, (short)0, data, (short)6, (short)3);
+		data[9] = keyID;
+		data[10] = algID;
+		Util.arrayCopyNonAtomic(pTemp32, (short)0, data, (short)11, (short)4);
+		
 		return 0;
 		
 	}
@@ -286,6 +355,98 @@ public class EPFile {
 	 * 返回：0 命令执行成功； 1 MAC校验错误 2 消费超额； 3 密钥未找到
 	 */
 	public final short purchase(byte[] data){
+		short rc;
+		/*
+		 * IC卡收到圈存命令后，用所查找到的密钥产生过程密钥
+		 * 其输入数据为伪随机数||电子钱包脱机交易序号||终端交易序号的最右两个字节
+		 * 密钥为所查找到的消费密钥
+		 * 
+		 * 在init4load中，将pTemp32 4bytes用来存放随即变量，将其写进pTemp32[0:3]
+		 * 电子钱包脱机交易序号2bytes在EP_offline中，将其写进pTemp32[4:5]
+		 * 终端交易序号在data中，取出就行
+		 * 
+		 * 对输入pTemp32[0:7]使用消费秘钥pTemp16[0:4]得到过程秘钥，写进pTemp82
+		 */
+
+		//Util.arrayCopyNonAtomic(pTemp32, (short)0, pTemp32, (short)0, (short)4);
+		Util.arrayCopyNonAtomic(EP_offline, (short)0, pTemp32, (short)4, (short)2);
+		Util.arrayCopyNonAtomic(data, (short)2, pTemp32, (short)6, (short)2);
+
+		//生成过程秘钥
+		EnCipher.gen_SESPK(pTemp16, pTemp32, (short)0, (short)8, pTemp82, (short)0); 
+
+		/*
+		 * IC卡利用过程密钥生成MAC1。
+		 * 输入数据：交易金额||交易类型标识(0x06)||终端机编号||交易日期（主机）||交易时间（主机）
+		 * 与消费命令传送的MAC1进行比较，如果相同，则MAC1有效,如果不一致就返回0x01
+		 */
+		Util.arrayCopyNonAtomic(pTemp42, (short)0, pTemp32, (short)0, (short)4);
+		pTemp32[4] = (byte)0x06;
+		Util.arrayCopyNonAtomic(pTemp81, (short)0, pTemp32, (short)5, (short)6);
+		Util.arrayCopyNonAtomic(data, (short)4, pTemp32, (short)11, (short)7);
+		EnCipher.gmac4(pTemp82, pTemp32, (short)0x12, pTemp41);
+		
+		if(Util.arrayCompare(data, (short)11, pTemp41, (short)0, (short)4) != (byte)0x00)  
+            return (short)0x01;    //不相同则返回1  
+
+		 // IC卡将电子钱包脱机交易序号加1
+		rc = Util.makeShort(EP_offline[0], EP_offline[1]);
+		rc ++;
+		if(rc > (short)256)
+			rc = (short)1;
+		Util.setShort(EP_offline, (short)0, rc);
+		
+		//并且把电子钱包的余额减去交易金额
+		rc = decrease(pTemp42, true);
+		if(rc != (short)0)
+			return 2;
+
+		/*
+		 * 在进行上述处理后，IC卡利用过程密钥生成MAC2。
+		 * 其输入数据为交易金额，密码为过程密钥。
+		 */
+		//byte[] temp = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);  
+        //Util.arrayCopyNonAtomic(pTemp16, (short)13, temp, (short)0, (short)8);//pTtem16[13]开始才是密钥  
+		//pTemp32 = JCSystem.makeTransientByteArray((short)32, JCSystem.CLEAR_ON_DESELECT);  
+		Util.arrayCopyNonAtomic(pTemp42, (short)0, pTemp32, (short)0, (short)4);
+		EnCipher.gmac4(pTemp82, pTemp32, (short)0x4, pTemp41); //pTemp32被拓展
+		
+		Util.arrayCopyNonAtomic(pTemp41, (short)0, data, (short)4, (short)4); //返回mac2
+
+		/*
+		 * 	IC卡生成TAC码。
+		 * TAC码的生成方式和MAC码的生成方式一致。
+		 * 输入：交易金额||交易类型标识||终端机编号||终端交易序号||交易日期（主机）||交易时间（主机）。
+		 * 密钥为TAC密码最左8个字节与TAC密码最右8个字节异或的结果。
+		 */
+		//byte[] pTemp32 = JCSystem.makeTransientByteArray((short)32, JCSystem.CLEAR_ON_DESELECT);  
+		Util.arrayCopyNonAtomic(pTemp42, (short)0, pTemp32, (short)0, (short)4);
+		pTemp32[4] = 0x06;
+		Util.arrayCopyNonAtomic(pTemp81, (short)0, pTemp32, (short)5, (short)6);
+		Util.arrayCopyNonAtomic(data, (short)0, pTemp32, (short)11, (short)4);
+		Util.arrayCopyNonAtomic(data, (short)4, pTemp32, (short)15, (short)7);
+
+		short length, num;
+		num = keyfile.findKeyByType((byte)0x34);//为什么只找0x34？？？？？
+		length = keyfile.readkey(num, pTemp16);
+		
+		if(length == 0)
+			return (short)3;
+		
+		//取秘钥的前8位，写进pTemp82[0:7]，覆盖掉过程秘钥
+		Util.arrayCopyNonAtomic(pTemp16, (short)5, pTemp82, (short)0, (short)8);//去掉前五位密钥头部
+		//key再搞搞事情，计算tac，写进data
+		EnCipher.xorblock8(pTemp82, pTemp16, (short)13);//密钥左8位和右8位异或得到新密钥
+		
+
+        //得到tac同时返回tac给终端  
+        byte[] temp = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);  
+        Util.arrayCopyNonAtomic(pTemp16, (short)13, temp, (short)0, (short)8);//pTtem16[13]开始才是密钥
+		
+		//EnCipher.gmac4(pTemp82, pTemp32, (short)0x22, pTemp41);//得到tac，这个地方出现了越界
+        EnCipher.gmac4(temp, pTemp32, (short)22, data);//得到tac直接复制给data返回了
+		//Util.arrayCopyNonAtomic(pTemp41, (short)0, data, (short)0, (short)4);
+		//ISOException.throwIt((short) 0x1234);
 		return 0;
 	}
 	/*
@@ -294,6 +455,7 @@ public class EPFile {
 	 * 返回： 0
 	 */
 	public final short get_balance(byte[] data){
+		Util.arrayCopyNonAtomic(EP_balance, (short)0, data, (short)0, (short)4);
 		return 0;
 	}
 }

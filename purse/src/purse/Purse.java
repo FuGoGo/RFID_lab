@@ -111,13 +111,15 @@ public class Purse extends Applet {
 	 */
 	private boolean handleEvent(){
 		switch(papdu.ins){
-			case condef.INS_CREATE_FILE:return create_file(); 				// E0 文件创建
+			case condef.INS_CREATE_FILE:return create_file(); 				// 0xE0 文件创建
 			//todo：完成写二进制命令，读二进制命令，写密钥命令
-            case condef.INS_WRITE_KEY: 	return write_key();  				// D4 写秘钥
-            case condef.INS_WRITE_BIN:	return write_read_bin((byte)'U');  	// D6 写二进制文件
-            case condef.INS_READ_BIN:	return write_read_bin((byte)'R');  	// B0读二进制文件
-    		case condef.INS_LOAD:		return load();
-    		case condef.INS_NIIT_TRANS:	return init_load_purchase(papdu.p1);//消费初始化或者圈存初始化
+            case condef.INS_WRITE_KEY: 	return write_key();  				// 0xD4 写秘钥
+            case condef.INS_WRITE_BIN:	return write_read_bin((byte)'U');  	// 0xD6 写二进制文件
+            case condef.INS_READ_BIN:	return write_read_bin((byte)'R');  	// 0xB0读二进制文件
+    		case condef.INS_NIIT_TRANS:	return init_load_purchase(papdu.p1);// 0x50消费初始化或者圈存初始化
+    		case condef.INS_LOAD:		return load();						// 0x52圈存
+    		case condef.INS_PURCHASE:	return purchase();					// 0x54消费
+    		case condef.INS_GET_BALANCE:return get_balance();				// 0x5c查询余额
 		}	
 		ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // 0x6D00 表示 CLA错误 
 		return false;
@@ -434,8 +436,10 @@ public class Purse extends Applet {
 		/*
 		 * 检查EPFile，只会返回2或者0， 2表示超额，0表示成功
 		 * 传入参数，秘钥标识符num，[交易金额 | 终端机编号]papdu.pdata
-		 * 结果姐会在参数2中，结构如下
+		 * 结果会在参数2中，结构如下
 		 * 余额4bytes | 联机交易序列号2bytes | 秘钥版本号1byte | 算法标识1byte | 伪随机数4bytes | mac14bytes
+		 * eg： 08 00 00 10 00 00 11 22 33 44 55 10
+		 * 00 01 00 46 C0 E4 3D 99 5F 3E 5F
 		 */
 		rc = EPfile.init4load(num, papdu.pdata);
 		
@@ -455,6 +459,9 @@ public class Purse extends Applet {
 		
 		if(papdu.cla != (byte)0x80)
 			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+
+		if(papdu.ins != (byte)0x52)
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		
 		if(papdu.p1 != (byte)0x00 && papdu.p2 != (byte)0x00)
 			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
@@ -478,20 +485,6 @@ public class Purse extends Applet {
 		
 		return true;
 	}
-
-	
-	/*
-	 * 功能：消费命令的实现
-	 */
-	private boolean purchase(){
-		return true;
-	}
-	/*
-	 * 功能：余额查询功能的实现
-	 */
-	private boolean get_balance(){
-		return true;
-	}
 	
 	/*
 	 * 功能：消费初始化的实现
@@ -501,6 +494,9 @@ public class Purse extends Applet {
 		
 		if(papdu.cla != (byte)0x80)
 			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+
+		if(papdu.ins != (byte)0x50)
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		
 		//p1应该为0x01，p2应该为0x02
 		if(papdu.p1 != (byte)0x01 && papdu.p2 != (byte)0x02)
@@ -512,10 +508,15 @@ public class Purse extends Applet {
 		//根据tag寻找密钥返回密钥的记录号  
 		if(EPfile == null)
 			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
-		
+
+		// 如果EPfile存在，就不用在判断Keyfile是否存在了，因为Keyfile存在是EPfile的前提
 		num = keyfile.findkey(papdu.pdata[0]);
 		
-		//找不到相应的秘钥
+		/* 找不到相应的秘钥
+		 * IC卡根据密钥标识符，在密钥文件中查找该密钥标识符对应的消费密钥
+		 * 如果找不到，就返回状态字“9403”，表示不存在相对应的密钥。
+		 * 如果找到的话，就进行以下的处理
+		 */
 		if(num == 0x00)
 			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
 		
@@ -529,5 +530,65 @@ public class Purse extends Applet {
 		papdu.le = (short)0x0F;
 		
 		return true;
+	}
+	
+	/*
+	 * 功能：消费命令的实现
+	 */
+	private boolean purchase(){
+		short rc;
+		
+		if(papdu.cla != (byte)0x80)
+			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+
+		if(papdu.ins != (byte)0x54)
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+		
+		if(papdu.p1 != (byte)0x01 && papdu.p2 != (byte)0x00)
+			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
+		
+		if(EPfile == null)
+			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
+
+		//ISOException.throwIt((short) papdu.lc);
+		if(papdu.lc != (short)0x0F)
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		
+		rc = EPfile.purchase(papdu.pdata);
+		
+		if(rc == 1)//MAC2验证未通过
+			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+		else if(rc == 2)//如果余额小于交易金额，就返回状态字9401
+			ISOException.throwIt(condef.SW_BALANCE_NOT_ENOUGH);
+		else if(rc == 3)//查找失败
+			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
+		
+		papdu.le = (short)0x08;
+		return true;
+	}
+	
+	/*
+	 * 功能：余额查询功能的实现
+	 */
+	private boolean get_balance(){
+        if(papdu.cla != (byte)0x80)  
+            ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);  
+  
+		if(papdu.ins != (byte)0x5C)
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+        
+        if(papdu.p1 != (byte)0x00 && papdu.p2 != (byte)0x02)  
+            ISOException.throwIt(ISO7816.SW_WRONG_P1P2);  
+  
+        short result;  
+        byte[] balance = JCSystem.makeTransientByteArray((short)4, JCSystem.CLEAR_ON_DESELECT);//余额暂存  
+        result = EPfile.get_balance(balance);  
+  
+        if(result == (short)0)  
+            Util.arrayCopyNonAtomic(balance, (short)0, papdu.pdata, (short)0, (short)4);//余额data[0]~data[3]  
+  
+        papdu.le = (short)0x04;  
+  
+        return true;  
 	}
 }

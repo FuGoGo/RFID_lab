@@ -2,27 +2,27 @@
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
 		<item value="273" key="DIALOG_WIDTH"/>
-		<item value="194" key="DIALOG_Y_ORIGIN"/>
+		<item value="181" key="DIALOG_Y_ORIGIN"/>
+		<item value="839" key="DIALOG_X_ORIGIN"/>
 		<item value="400" key="DIALOG_HEIGHT"/>
-		<item value="919" key="DIALOG_X_ORIGIN"/>
 		<item value="1|Microsoft YaHei UI|9.0|0|WINDOWS|1|-12|0|0|0|400|0|0|0|1|0|0|0|0|Microsoft YaHei UI" key="DIALOG_FONT_NAME"/>
 	</section>
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
 		<item value="true" key="wrap"/>
-		<item value="false" key="isRegEx"/>
 		<item value="false" key="casesensitive"/>
+		<item value="false" key="isRegEx"/>
 		<item value="false" key="incremental"/>
 		<item value="false" key="wholeword"/>
-		<item value="SW_INS_NOT_SUPPORTED" key="selection"/>
+		<item value="" key="selection"/>
 		<list key="findhistory">
-			<item value="SW_INS_NOT_SUPPORTED"/>
-			<item value="INS value not supported"/>
-			<item value="getBuffer"/>
-			<item value="apdu"/>
-			<item value="setKey"/>
-			<item value="getInstance"/>
-			<item value="KeyFile"/>
-			<item value="e0"/>
+			<item value="1234"/>
+			<item value="pTemp41"/>
+			<item value="data"/>
+			<item value="0F"/>
+			<item value="000F"/>
+			<item value="0x1234"/>
+			<item value="rc"/>
+			<item value="pTemp32"/>
 		</list>
 		<list key="replacehistory">
 			<item value="Card_file"/>
