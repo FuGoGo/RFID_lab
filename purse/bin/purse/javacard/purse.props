@@ -1,5 +1,5 @@
 #package specification
-#Fri Apr 21 00:50:57 CST 2017
+#Fri Apr 21 11:37:53 CST 2017
 purse-minor=0
 masktools-version=1.1
 purse-clazzes=purse.BinaryFile purse.condef purse.EPFile purse.KeyFile purse.Papdu purse.PenCipher purse.Purse purse.Randgenerator

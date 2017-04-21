@@ -88,6 +88,8 @@ public class EPFile {
 	public final short init4load(short num, byte[] data){
 		short length,rc;
 		
+		//pTemp42用来存放交易金额
+		//pTemp81用来存放终端机编号
 		Util.arrayCopyNonAtomic(data, (short)1, pTemp42, (short)0, (short)4);  //交易金额
 		Util.arrayCopyNonAtomic(data, (short)5, pTemp81, (short)0, (short)6);  //终端机编号
 		
@@ -96,32 +98,79 @@ public class EPFile {
 		if(rc != (short)0)
 			return (short)2;
 		
-		//密钥获取
+		/*
+		 * 密钥获取
+		 * keyfile中显示，取到的秘钥存在pTemp32中，返回伪所查找到的圈存密钥的长度
+		 * pTemp32结构：5个字节的密钥头+16个字节的密钥值
+		 * 具体结构为前3个byte未知，密钥版本号 1byte，算法标识  1byte，所查找到的圈存密钥16bytes
+		 * keyID密钥版本号
+		 * algID算法标识符
+		 * pTemp16所查找到的圈存密钥
+		 */
 		length = keyfile.readkey(num, pTemp32);
 		keyID = pTemp32[3];
 		algID = pTemp32[4];
 		Util.arrayCopyNonAtomic(pTemp32, (short)5, pTemp16, (short)0, length);
 		
-		//产生随机数
+		/*
+		 * 产生随机数
+		 * RandData.GenerateSecureRnd()函数功能，产生一个4bytes的随机数
+		 * RandData.getRndValue(pTemp32, (short)0)功能，将随机数写进pTemp32[0:3]
+		 */
 		RandData.GenerateSecureRnd();
 		RandData.getRndValue(pTemp32, (short)0);
 		
-		//产生过程密钥
+		/*
+		 * 产生过程密钥——输入数据为伪随机数4bytes||电子钱包联机交易序号2bytes||8000
+		 * 在这个部分结束之后，输入数据全部已经写入pTemp32中
+		 */
 		Util.arrayCopyNonAtomic(EP_online, (short)0, pTemp32, (short)4, (short)2);
 		pTemp32[6] = (byte)0x80;
 		pTemp32[7] = (byte)0x00;
 		
+		/*
+		 * IC卡生成随机数，利用所查找到的密钥产生过程密钥。
+		 * 过程密钥的生成方式，我将在之后的密钥管理中进行说明。
+		 * ！其输入的数据为伪随机数||电子钱包联机交易序号||8000
+		 * ！密钥为所查找到的圈存密钥
+		 * gen_SESPK参数：key 密钥； data 所要加密的数据； dOff 所加密的数据偏移量； dLen 所加密的数据长度； r 加密后的数据； rOff 加密后的数据存储偏移量
+		 * 过程秘钥4bytes已经存在pTemp16中，输入数据8bytes已经存在pTemp32中
+		 * 加密后的结果是过程秘钥 8bytes，存在pTemp82中
+		 */
 		EnCipher.gen_SESPK(pTemp16, pTemp32, (short)0, (short)8, pTemp82, (short)0); 
 		
-		//产生MAC1
+		/*
+		 * IC卡利用所生成的过程密钥产生MAC1。
+		 * 其MAC1的生成方式，我也将在之后的密钥管理中进行说明。
+		 * ！其输入的数据为电子钱包余额（交易前）||交易金额||交易类型标识||终端机编号
+		 * ！密钥为过程密钥，
+		 * 
+		 * EP_balance，4bytes，电子钱包余额，存进pTemp32[0:3]
+		 * data[1:4], 交易金额, 存进pTemp32[4:7]
+		 * 交易类型0x02(p2)，1byte，存进存进pTemp32[8]
+		 * data[5:10]，终端机型编号，6byte，存进pTemp32[9:14]
+		 * 
+		 */
 		Util.arrayCopyNonAtomic(EP_balance, (short)0, pTemp32, (short)0, (short)4);   //电子钱包余额
 		Util.arrayCopyNonAtomic(data, (short)1, pTemp32, (short)4, (short)4);         //交易金额
 		pTemp32[8] = (byte)0x02;                                                      //交易类型标识
 		Util.arrayCopyNonAtomic(data, (short)5, pTemp32, (short)9, (short)6);         //终端机编号
+		
+		/*
+		 * 将临时数组内的内容写进data
+		 * 对输入数据data 15bytes，使用过程秘钥pTemp82 8bytes加密
+		 * 有点担心gmac4的时候，爆数组= =
+		 * 加密后的mac值4bytes，存进pTemp41
+		 */
 		Util.arrayCopyNonAtomic(pTemp32, (short)0, data, (short)0x00, (short)0x0F);
+		//gmac4参数：key 密钥; data 所要加密的数据; dl 所要加密的数据长度； mac 所计算得到的MAC和TAC码
 		EnCipher.gmac4(pTemp82, pTemp32, (short)0x0F, pTemp41);
 		
-		//响应数据
+		/*
+		 * 响应数据结构如下
+		 * 余额4bytes | 联机交易序列号2bytes | 秘钥版本号1byte | 算法标识1byte | 伪随机数4bytes | mac14bytes
+		 * 依次写进data
+		 */
 		Util.arrayCopyNonAtomic(EP_balance, (short)0, data, (short)0, (short)4);      //电子钱包余额
 		Util.arrayCopyNonAtomic(EP_online, (short)0, data,  (short)4, (short)2);      //电子钱包联机交易序号
 		data[6] = keyID;                                                              //密钥版本号
@@ -139,14 +188,30 @@ public class EPFile {
 	 */
 	public final short load(byte[] data){
 		short rc;
-		
+		/*
+		 * IC卡收到圈存命令后，利用过程密钥生成MAC2。
+		 * 其输入数据为交易金额||交易类型标识||终端机编号||交易日期（主机）||交易时间（主机）
+		 * 密钥为过程密钥
+		 * 与圈存命令传送的MAC2进行比较，如果相同，则MAC2有效
+		 * 
+		 * 在init4load中，将pTemp42 4bytes用来存放交易金额，将其写进pTemp32[0:3]
+		 * 标识符p2为0x02 1byte，将其写进pTemp32[4]
+		 * 在init4load中，pTemp81 6bytes用来存放终端机编号，将其写进pTemp32[5:10]
+		 * 终端想IC发送的校验指令中，data[0:6]为[日期 | 时间]，将其写进pTemp32[11:17]
+		 * 在init4load中，加密后的结果是过程秘钥 8bytes，存在pTemp82中
+		 * 对输入pTemp32[0:17]使用过程秘钥pTemp82[0:7]使用gmac4加密，结果写进pTemp41
+		 */
 		Util.arrayCopyNonAtomic(pTemp42, (short)0, pTemp32, (short)0, (short)4);       //交易金额
 		pTemp32[4] = (byte)0x02;                                                       //交易标识
 		Util.arrayCopyNonAtomic(pTemp81, (short)0, pTemp32, (short)5, (short)6);       //终端机编号
 		Util.arrayCopyNonAtomic(data, (short)0, pTemp32, (short)11, (short)7);         //交易日期与时间
 		EnCipher.gmac4(pTemp82, pTemp32, (short)0x12, pTemp41);
 		
-		//检验MAC2
+		/*
+		 * 检验MAC2
+		 * data[7:10]为MAC2，将其和IC卡自己计算出来的mac2进行校验
+		 * 如果一致，IC卡就能够确认终端机的身份了
+		 */
 		if(Util.arrayCompare(data, (short)7, pTemp41, (short)0, (short)4) != (byte)0x00)
 			return (short)1;
 		
@@ -155,7 +220,12 @@ public class EPFile {
 		if(rc != (short)0)
 			return 2;
 		
-		//TAC数据
+		/*
+		 * IC卡生成TAC码。
+		 * TAC码的生成方式和MAC码的生成方式一致。
+		 * 输入：电子钱包余额（交易后）||电子钱包联机交易序号（加1前）||交易金额||交易类型标识||终端机编号||交易日期（主机）||交易时间（主机）。
+		 * 密钥为TAC密码最左8个字节与TAC密码最右8个字节异或的结果。
+		 */
 		Util.arrayCopyNonAtomic(EP_balance, (short)0, pTemp32, (short)0, (short)4);    //电子钱包余额
 		Util.arrayCopyNonAtomic(EP_online, (short)0, pTemp32, (short)4, (short)2);     //电子钱包联机交易序号
 		Util.arrayCopyNonAtomic(pTemp42, (short)0, pTemp32, (short)6, (short)4);       //交易金额
@@ -170,22 +240,29 @@ public class EPFile {
 			rc = (short)1;
 		Util.setShort(EP_online, (short)0, rc);
 		
-		//TAC的计算
+		/*
+		 * TAC的计算
+		 * 获取秘钥16bytes，存进pTemp16
+		 * keyfile中显示，取到的秘钥存在pTemp16中，返回伪所查找到的圈存密钥的长度
+		 * pTemp16结构：5个字节的密钥头+16个字节的密钥值
+		 * 具体结构为前3个byte未知，密钥版本号 1byte，算法标识  1byte，所查找到的圈存密钥16bytes
+		 */
 		short length, num;
-		num = keyfile.findKeyByType((byte)0x34);
+		num = keyfile.findKeyByType((byte)0x34);//为什么只找0x34？？？？？
 		length = keyfile.readkey(num, pTemp16);
 		
 		if(length == 0)
 			return (short)3;
 		
+		//取秘钥的前8位，写进pTemp82[0:7]，覆盖掉过程秘钥
 		Util.arrayCopyNonAtomic(pTemp16, (short)5, pTemp82, (short)0, (short)8);
-		
+		//key再搞搞事情，计算tac，写进data
 		EnCipher.xorblock8(pTemp82, pTemp16, (short)13);
 		EnCipher.gmac4(pTemp82, pTemp32, (short)0x18, data);
 		
 		return (short)0;
 	}
-		/*
+	/*
 	 * 功能：电子钱包金额减少
 	 * 参数：data 消费的金额； flag 是否真正扣减电子钱包余额
 	 * 返回： 消费是否超额

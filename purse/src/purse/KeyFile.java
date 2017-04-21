@@ -5,7 +5,7 @@ import javacard.framework.Util;
 public class KeyFile {
 	public short size;         //记录的最大存储数量
 	public short recNum;       //当前所存储的记录数量
-	private Object[] Key;      //密钥记录
+	private Object[] Key;      //密钥记录，一个指针数组
 	
 	public KeyFile(){
 		size = 4;
@@ -73,6 +73,7 @@ public class KeyFile {
 	public short readkey(short num, byte[] data){
 		byte[] pdata;
 		pdata = (byte[])Key[num - 1];
+		//卧槽，在这个地方，原本23位的Key值被裁掉了2位，只剩下5个字节的密钥头+16个字节的密钥值
 		Util.arrayCopyNonAtomic(pdata, (short)2, data, (short)0, (short)(pdata[1]));
 		return (short)(pdata[1] - 5);
 	}

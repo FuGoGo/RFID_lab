@@ -62,17 +62,14 @@ public class PenCipher {
 		//todo
 		//cdes参数：key 密钥; kOff 密钥的偏移量; data 所要进行加解密的数据; dOff 数据偏移量； dLen 数据的长度; r 加解密后的数据缓冲区； rOff 结果数据偏移量； mode 加密或解密运算模式
 		
-		//子秘钥的左半部分加密
-		// 开辟临时数组存放变量
-        byte[] data_des_1st = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);
-        cdes(key,(short)0,data,(short)0,dLen,data_des_1st,(short)0,Cipher.MODE_ENCRYPT);  
+		//对data使用子秘钥的左半部分加密，写进data
+		cdes(key,(short)0,data,(short)0,dLen,data,(short)0,Cipher.MODE_ENCRYPT);  
         
-        //子秘钥的右半部分解密
-        byte[] data_des_2ed = JCSystem.makeTransientByteArray((short)8, JCSystem.CLEAR_ON_DESELECT);  
-        cdes(key,(short)8,data_des_1st,(short)0,dLen,data_des_2ed,(short)0,Cipher.MODE_DECRYPT);  
+        //对data使用子秘钥的右半部分解密，所以kOff为0x08，写进data，解密，所以模式为MODE_DECRYPT
+        cdes(key,(short)8,data,(short)0,dLen,data,(short)0,Cipher.MODE_DECRYPT);  
         
-        //子秘钥的左半部分再次加密，写进r
-        cdes(key,(short)0,data_des_2ed,(short)0,dLen,r,rOff,Cipher.MODE_ENCRYPT);  
+        //对data使用子秘钥的左半部分再次加密，写进r结束
+        cdes(key,(short)0,data,(short)0,dLen,r,rOff,Cipher.MODE_ENCRYPT);  
 	}
 	
 	/*
@@ -99,12 +96,21 @@ public class PenCipher {
 		
 		//数据填充：在输入的数据尾部填入0x80，检查数据的字节数是否为8的倍数。
 		//如果不足，则在尾部添加0x00，直至满足8的倍数为止。
+		//防爆失败
+		/*
+		byte[] data_temp = new byte[(len>>3+1)*8];
+		for(short i = 0; i<len; ++i){
+			data_temp[i] = data[i];
+		}
+		data = new byte[(len>>3+1)*8];
+		for(short i = 0; i<len; ++i){
+			data[i] = data_temp[i];
+		}
+		*/
 		 data[len++] = (byte)0x80;
 		 for(;len%8 != 0;)
 			 data[len++] = (byte)0x00;  
 		 
-        //测试大招--直接抛出len值看是不是这里有bug  
-        //ISOException.throwIt(len);  
 		return len;
 	}
 	
@@ -119,19 +125,21 @@ public class PenCipher {
         short new_dl = pbocpadding(data,dl);
         
         //初始向量，存在mac_tac中
+        //初始变量的值不唯一
         byte[] mac_tac = {0x11,0x11,0x11,0x11,0x11,0x11,0x11,0x11};  
         
 		//将这些数据分割为8字节长的数据块组。
-        short num = (short)(new_dl/8); //切分成多少块 
+        short num = (short)(new_dl>>3); //切分成多少块 
         
         /* 
          * 《03 电子钱包的管理》P13 mac_tac的生成
          * cdes参数：key 密钥; kOff 密钥的偏移量; data 所要进行加解密的数据; dOff 数据偏移量； dLen 数据的长度; r 加解密后的数据缓冲区； rOff 结果数据偏移量； mode 加密或解密运算模式
          */
         for(short i = 0; i < num; ++i) {
-            xorblock8(mac_tac, data, (short)(i*8));
+            xorblock8(mac_tac, data, (short)(i<<3));
             cdes(key,(short)0,mac_tac,(short)0,(short)8,mac_tac,(short)0,Cipher.MODE_ENCRYPT);  
         }  
+        //mac只有4个字节，所以只用取前四位进行比较
         for(byte i = 0; i < 4; i++) {
             mac[i] = mac_tac[i];  
         }  

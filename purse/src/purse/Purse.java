@@ -116,6 +116,8 @@ public class Purse extends Applet {
             case condef.INS_WRITE_KEY: 	return write_key();  				// D4 写秘钥
             case condef.INS_WRITE_BIN:	return write_read_bin((byte)'U');  	// D6 写二进制文件
             case condef.INS_READ_BIN:	return write_read_bin((byte)'R');  	// B0读二进制文件
+    		case condef.INS_LOAD:		return load();
+    		case condef.INS_NIIT_TRANS:	return init_load_purchase(papdu.p1);//消费初始化或者圈存初始化
 		}	
 		ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED); // 0x6D00 表示 CLA错误 
 		return false;
@@ -165,6 +167,14 @@ public class Purse extends Applet {
     	switch(U_R){
     		case (byte)'U': return write_binary();
     		case (byte)'R': return read_binary();
+    		default : return false;
+    	}
+    }
+    
+    private boolean init_load_purchase(short load_purchase){
+    	switch(load_purchase){
+    		case (short)0x00: return init_load();
+    		case (short)0x01: return init_purchase();
     		default : return false;
     	}
     }
@@ -394,6 +404,49 @@ public class Purse extends Applet {
         return true;  
     }  
     
+	/*
+	 * 功能：圈存初始化命令的实现
+	 */
+	private boolean init_load() {
+		short num,rc = 0;
+		
+		if(papdu.cla != (byte)0x80)
+			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+		
+		if(papdu.ins != (byte)0x50)
+			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
+		
+		if(papdu.p1 != (byte)0x00 && papdu.p2 != (byte)0x02)
+			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
+		
+		if(papdu.lc != (short)0x0B)
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		
+		if(EPfile == null)
+			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
+		
+		//pdata[0]交易索引号，根据索引号寻找秘钥
+		num = keyfile.findkey(papdu.pdata[0]);
+		
+		if(num == 0x00)
+			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
+		
+		/*
+		 * 检查EPFile，只会返回2或者0， 2表示超额，0表示成功
+		 * 传入参数，秘钥标识符num，[交易金额 | 终端机编号]papdu.pdata
+		 * 结果姐会在参数2中，结构如下
+		 * 余额4bytes | 联机交易序列号2bytes | 秘钥版本号1byte | 算法标识1byte | 伪随机数4bytes | mac14bytes
+		 */
+		rc = EPfile.init4load(num, papdu.pdata);
+		
+		if(rc == 2)
+			ISOException.throwIt((condef.SW_LOAD_FULL));		
+		
+		papdu.le = (short)0x10;
+		
+		return true;
+	}
+    
     /*
 	 * 功能：圈存命令的实现
 	 */
@@ -414,9 +467,9 @@ public class Purse extends Applet {
 		
 		rc = EPfile.load(papdu.pdata);
 		
-		if(rc == 1)
+		if(rc == 1)//MAC2验证未通过
 			ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
-		else if(rc == 2)
+		else if(rc == 2)//
 			ISOException.throwIt(condef.SW_LOAD_FULL);
 		else if(rc == 3)
 			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
@@ -426,56 +479,6 @@ public class Purse extends Applet {
 		return true;
 	}
 
-	/*
-	 * 功能：圈存初始化命令的实现
-	 */
-	private boolean init_load() {
-		short num,rc = 0;
-		
-		if(papdu.cla != (byte)0x80)
-			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
-		
-		if(papdu.p1 != (byte)0x00 && papdu.p2 != (byte)0x02)
-			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
-		
-		if(papdu.lc != (short)0x0B)
-			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
-		
-		if(EPfile == null)
-			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
-		
-		num = keyfile.findkey(papdu.pdata[0]);
-		
-		
-		if(num == 0x00)
-			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
-		
-		rc = EPfile.init4load(num, papdu.pdata);
-		
-		if(rc == 2)
-			ISOException.throwIt((condef.SW_LOAD_FULL));		
-		
-		papdu.le = (short)0x10;
-		
-		return true;
-	}
-	
-	private void test_out(APDU apdu){
-		byte[] buf = apdu.getBuffer();
-		byte ins = buf[ISO7816.OFFSET_INS];
-
-		//short lc = apdu.setIncomingAndReceive();
-		switch (ins) {
-		case (byte) 0x00:
-			byte [] srcdata = {'h','e','l','l','o',',','w','o','r','l','d','!'}; 
-			Util.arrayCopyNonAtomic(srcdata, (short)0, buf, (short)0, (short) srcdata.length);
-			apdu.setOutgoingAndSend((short) 0, (short) srcdata.length);
-			break;
-		default:
-			// good practice: If you don't know the INStruction, say so:
-			ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
-		}
-	}
 	
 	/*
 	 * 功能：消费命令的实现
@@ -494,6 +497,37 @@ public class Purse extends Applet {
 	 * 功能：消费初始化的实现
 	 */
 	private boolean init_purchase(){
+		short num,rc = 0;
+		
+		if(papdu.cla != (byte)0x80)
+			ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+		
+		//p1应该为0x01，p2应该为0x02
+		if(papdu.p1 != (byte)0x01 && papdu.p2 != (byte)0x02)
+			ISOException.throwIt(ISO7816.SW_WRONG_P1P2);
+		
+		if(papdu.lc != (short)0x0B)
+			ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		
+		//根据tag寻找密钥返回密钥的记录号  
+		if(EPfile == null)
+			ISOException.throwIt(ISO7816.SW_FILE_NOT_FOUND);
+		
+		num = keyfile.findkey(papdu.pdata[0]);
+		
+		//找不到相应的秘钥
+		if(num == 0x00)
+			ISOException.throwIt(ISO7816.SW_RECORD_NOT_FOUND);
+		
+		//调用默认的init4purchase，其他的类似
+		rc = EPfile.init4purchase(num, papdu.pdata);
+		
+		if(rc == 2)
+			ISOException.throwIt((condef.SW_BALANCE_NOT_ENOUGH));
+		
+		//init_purchase初始化期待的LE为0x0F，而不是0x10
+		papdu.le = (short)0x0F;
+		
 		return true;
 	}
 }
