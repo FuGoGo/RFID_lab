@@ -27,3 +27,34 @@ Command-line arguments:  -os win32 -ws win32 -arch x86 -product org.eclipse.epp.
 
 !ENTRY org.eclipse.core.resources 2 10035 2017-04-21 11:56:12.124
 !MESSAGE The workspace exited with unsaved changes in the previous session; refreshing workspace to recover changes.
+!SESSION 2017-04-23 22:13:39.932 -----------------------------------------------
+eclipse.buildId=M20130204-1200
+java.version=1.6.0_35
+java.vendor=Sun Microsystems Inc.
+BootLoader constants: OS=win32, ARCH=x86, WS=win32, NL=zh_CN
+Framework arguments:  -product org.eclipse.epp.package.cpp.product
+Command-line arguments:  -os win32 -ws win32 -arch x86 -product org.eclipse.epp.package.cpp.product
+
+!ENTRY com.ibm.bluez.jcop.eclipse 4 0 2017-04-24 15:22:20.979
+!MESSAGE No further information available.
+!STACK 0
+com.ibm.bluez.jcop.eclipse.internal.builder.BuilderException
+	at com.ibm.bluez.jcop.eclipse.internal.builder.BuilderUtil.getOutputPath(BuilderUtil.java:93)
+	at com.ibm.bluez.jcop.eclipse.internal.builder.BuilderUtil.getCapFilePath(BuilderUtil.java:892)
+	at com.ibm.bluez.jcop.eclipse.internal.ui.views.jcasm.BytecodeView.selectionChanged(BytecodeView.java:317)
+	at com.ibm.bluez.jcop.eclipse.internal.ui.views.jcasm.BytecodeView.resourceChanged(BytecodeView.java:284)
+	at org.eclipse.core.internal.events.NotificationManager$1.run(NotificationManager.java:291)
+	at org.eclipse.core.runtime.SafeRunner.run(SafeRunner.java:42)
+	at org.eclipse.core.internal.events.NotificationManager.notify(NotificationManager.java:285)
+	at org.eclipse.core.internal.events.NotificationManager.broadcastChanges(NotificationManager.java:149)
+	at org.eclipse.core.internal.resources.Workspace.broadcastBuildEvent(Workspace.java:381)
+	at org.eclipse.core.internal.events.AutoBuildJob.doBuild(AutoBuildJob.java:146)
+	at org.eclipse.core.internal.events.AutoBuildJob.run(AutoBuildJob.java:241)
+	at org.eclipse.core.internal.jobs.Worker.run(Worker.java:53)
+Caused by: Java Model Exception: Java Model Status [Team22 does not exist]
+	at org.eclipse.jdt.internal.core.JavaElement.newNotPresentException(JavaElement.java:495)
+	at org.eclipse.jdt.internal.core.JavaModelManager.getPerProjectInfoCheckExistence(JavaModelManager.java:2285)
+	at org.eclipse.jdt.internal.core.JavaProject.getPerProjectInfo(JavaProject.java:1907)
+	at org.eclipse.jdt.internal.core.JavaProject.getOutputLocation(JavaProject.java:1734)
+	at com.ibm.bluez.jcop.eclipse.internal.builder.BuilderUtil.getOutputPath(BuilderUtil.java:91)
+	... 11 more

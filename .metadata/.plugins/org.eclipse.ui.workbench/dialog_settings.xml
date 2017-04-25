@@ -12,8 +12,12 @@
 		<list key="textEntries">
 		</list>
 	</section>
+	<section name="WorkbenchPreferenceDialogSettings">
+		<item value="8" key="DIALOG_Y_ORIGIN"/>
+		<item value="263" key="DIALOG_X_ORIGIN"/>
+	</section>
 	<section name="NewWizardAction">
-		<item value="com.ibm.bluez.jcop.eclipse.wizards.newproject" key="NewWizardSelectionPage.STORE_SELECTED_ID"/>
+		<item value="com.ibm.bluez.jcop.eclipse.wizards.newapp" key="NewWizardSelectionPage.STORE_SELECTED_ID"/>
 		<list key="NewWizardSelectionPage.STORE_EXPANDED_CATEGORIES_ID">
 			<item value="com.ibm.bluez.jcop.eclipse.categories.javacard"/>
 		</list>

@@ -20,6 +20,6 @@ public class condef {
 	final static byte EP_FILE			= (byte)0x2F;	//电子钱包文件的文件类型
 	
 	//------------------------ SW --------------------- 
-	final static short SW_LOAD_FULL 		 = (short)0x9501;		//圈存超额
+	final static short SW_LOAD_FULL 		 = (short)0x9501;	//圈存超额
 	final static short SW_BALANCE_NOT_ENOUGH = (short)0x9401;	//金额不足
 }

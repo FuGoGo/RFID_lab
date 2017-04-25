@@ -273,7 +273,7 @@ public class EPFile {
 		 * 具体结构为前3个byte未知，密钥版本号 1byte，算法标识  1byte，所查找到的圈存密钥16bytes
 		 */
 		short length, num;
-		num = keyfile.findKeyByType((byte)0x34);//为什么只找0x34？？？？？
+		num = keyfile.findKeyByType((byte)0x34);//寻找0x34是因为对应TAC秘钥
 		length = keyfile.readkey(num, pTemp16);
 		
 		if(length == 0)
@@ -304,9 +304,9 @@ public class EPFile {
 		/*
 		 * 判断是否超额圈存
 		 * IC卡检查电子钱包余额是否大于或等于交易金额
-		 * 如果小于交易金额，则回送状态字9401，表示资金不足。
+		 * 如果小于交易金额，则回送状态字2，表示资金不足。
 		 */
-		rc = increase(pTemp42, false);
+		rc = decrease(pTemp42, false);
 		if(rc != (short)0)
 			return (short)2;
 		
